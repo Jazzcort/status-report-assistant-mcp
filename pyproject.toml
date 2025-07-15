@@ -1,0 +1,25 @@
+[project]
+name = "status-report-assistant-mcp"
+version = "0.1.0"
+description = "A MCP server to assist with status report"
+readme = "README.md"
+requires-python = ">=3.13"
+authors = [
+    {name = "Chih-Tao Lee", email = "jason101011113@gmail.com"}
+]
+license = {text = "MIT"}
+dependencies = [
+    "fastmcp>=2.10.5",
+    "google>=3.0.0",
+    "google-api-python-client>=2.176.0",
+    "google-auth-httplib2>=0.2.0",
+    "google-auth-oauthlib>=1.2.2",
+    "pydantic>=2.11.7",
+]
+
+[project.scripts]
+mcp-serve = "status_report_assistant_mcp.cli:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
