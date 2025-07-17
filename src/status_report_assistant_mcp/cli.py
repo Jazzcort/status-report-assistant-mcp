@@ -1,15 +1,17 @@
-import subprocess
-from typing import List, Annotated
-from .customized_exception import (
-    UserEmailNotFound,
-    GitCommandNotFound,
-    FailToGetCommitHashes,
-)
-from fastmcp import FastMCP
 import os
-from .dirs import HOME_DIR
+import subprocess
+from typing import Annotated, List
+
+from fastmcp import FastMCP
 from pydantic import Field
-from .gmail_services import get_gmail_service, create_message, create_draft
+
+from .customized_exception import (
+    FailToGetCommitHashes,
+    GitCommandNotFound,
+    UserEmailNotFound,
+)
+from .dirs import HOME_DIR
+from .gmail_services import create_draft, create_message, get_gmail_service
 
 mcp = FastMCP("local_git_summary")
 
@@ -56,7 +58,11 @@ async def gather_work_log(
 
 
 @mcp.tool()
-async def create_draft_email(to: str, subject: str, content: str) -> str:
+async def create_draft_email(
+    to: Annotated[List[str], Field(description="Recipients of this email draft")],
+    subject: Annotated[str, Field(description="Subject of this draft email")],
+    content: Annotated[str, Field(description="Content of this draft email")],
+) -> str:
     """Create a draft email with the given subject, content, and receiver"""
     try:
         service = get_gmail_service()

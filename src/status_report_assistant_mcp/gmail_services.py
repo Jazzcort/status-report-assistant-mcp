@@ -1,19 +1,21 @@
+import base64
 import os
+from email.mime.text import MIMEText
+from typing import List
 
 from google.auth.transport.requests import Request
 from google.oauth2.credentials import Credentials
 from google_auth_oauthlib.flow import InstalledAppFlow
 from googleapiclient.discovery import build
-import base64
-from email.mime.text import MIMEText
-from .utils import get_parent_directory
+
 from .customized_exception import (
-    MissingEnvironmentVariables,
-    FailToParseCredentials,
-    MissingGoogleOAuth2Credentials,
-    FailToGetTokenWithGoogleOAuth2Credentials,
     FailToBuildGmailService,
+    FailToGetTokenWithGoogleOAuth2Credentials,
+    FailToParseCredentials,
+    MissingEnvironmentVariables,
+    MissingGoogleOAuth2Credentials,
 )
+from .utils import get_parent_directory
 
 GOOGLE_OAUTH2_VAR = "GOOGLE_OAUTH2_CREDENTIALS"
 TOKEN_VAR = "CREDENTIAL_TOKEN"
@@ -82,16 +84,15 @@ def get_new_token_with_flow(oauth2_creds_path: str):
         raise FailToGetTokenWithGoogleOAuth2Credentials(oauth2_creds_path)
 
 
-def create_message(sender, to, subject, message_text):
+def create_message(sender: str, to: List[str], subject: str, message_text: str):
     message = MIMEText(message_text)
-    message["to"] = to
+    message["to"] = ", ".join(to)
     message["from"] = sender
     message["subject"] = subject
     raw = base64.urlsafe_b64encode(message.as_bytes()).decode()
     return {"message": {"raw": raw}}
 
 
-def create_draft(service, user_id, message_body):
+def create_draft(service, user_id: str, message_body):
     draft = service.users().drafts().create(userId=user_id, body=message_body).execute()
-    print("Draft created with ID:", draft["id"])
     return draft
