@@ -24,6 +24,37 @@ async def get_root_directory() -> str:
     """Get the root directory of the running machine which usually represents as ~"""
     return os.path.expanduser("~")
 
+@mcp.tool()
+async def gather_work_log_with_author_email(
+    author_email: Annotated[str, Field(description="The email of the author of the commits")],
+    dirs: Annotated[
+        List[str],
+        Field(
+            description="Path of the directory where the work log should be generated from. Never pass the directory that contains . in its path, but ~ is okay."
+        ),
+    ],
+    after: Annotated[
+        str, Field(description="The starting point of the time span for the work log")
+    ],
+    before: Annotated[
+        str, Field(description="The ending point of the time span for the work log")
+    ] = "now",
+) -> str:
+    """Gather all the commit messages with the given author's email within the given time span for the given direscories. This can be used as a fallback tool call when user.email is not set in the global scope or it can be used to gather the work log for a specific author."""
+
+    log = ""
+
+    try:
+        for dir in dirs:
+            dir_log = gather_git_commits(
+                convert_relative_to_absolute(dir), after, before, author_email
+            )
+            if dir_log:
+                log += f"{dir_log}\n"
+
+        return log if log else "No work log in the given time span"
+    except Exception as e:
+        return f"Failed to gather work log: {e}"
 
 @mcp.tool()
 async def gather_work_log(
@@ -40,7 +71,7 @@ async def gather_work_log(
         str, Field(description="The ending point of the time span for the work log")
     ] = "now",
 ) -> str:
-    """Gather all the commit messages within the given time span for the given direscories"""
+    """Gather all the commit messages with user.email as the author's email within the given time span for the given direscories"""
 
     log = ""
 
@@ -99,8 +130,8 @@ def gather_commit_details(dir: str, commit_hash: str) -> str:
         return ""
 
 
-def gather_git_commits(dir: str, after: str, before: str = "now") -> str:
-    hashes = gather_git_commit_hash(dir, after, before)
+def gather_git_commits(dir: str, after: str, before: str = "now", author_email: str = "") -> str:
+    hashes = gather_git_commit_hash(dir, after, before, author_email)
 
     full_content = ""
 
@@ -113,8 +144,8 @@ def gather_git_commits(dir: str, after: str, before: str = "now") -> str:
     return full_content
 
 
-def gather_git_commit_hash(dir: str, after: str, before: str = "now") -> List[str]:
-    user_email = get_author_email()
+def gather_git_commit_hash(dir: str, after: str, before: str = "now", author_email: str = "") -> List[str]:
+    user_email = get_author_email() if not author_email else author_email
 
     try:
         result = subprocess.run(
