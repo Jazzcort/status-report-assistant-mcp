@@ -1,6 +1,6 @@
 import os
 import subprocess
-from typing import Annotated, List
+from typing import Annotated, List, Dict
 
 from fastmcp import FastMCP
 from pydantic import Field
@@ -12,6 +12,11 @@ from .customized_exception import (
 )
 from .dirs import HOME_DIR
 from .gmail_services import create_draft, create_message, get_gmail_service
+from .github_search_services import (
+    get_merged_pull_requests,
+    get_issues_created,
+    get_pull_requests_created,
+)
 
 mcp = FastMCP("local_git_summary")
 
@@ -24,9 +29,65 @@ async def get_root_directory() -> str:
     """Get the root directory of the running machine which usually represents as ~"""
     return os.path.expanduser("~")
 
+
+@mcp.tool()
+async def get_github_summary(
+    github_username: Annotated[
+        str,
+        Field(
+            description="The Github username of the person that this github summary is created from"
+        ),
+    ],
+    after: Annotated[
+        str,
+        Field(
+            description="The beginning of the time span. It needs to be like this format YYYY-MM-DD."
+        ),
+    ],
+    before: Annotated[
+        str,
+        Field(
+            description="The end of the time span. It needs to be like this format YYYY-MM-DD."
+        ),
+    ],
+) -> Dict[str, List[Dict[str, str]]] | str:
+    """
+    Gather the following three lists from Github for the given author in the given time span:
+        1. Pull requests that are merged during this time span
+        2. Pull requests that are created during this time span
+        3. Issues that are created during this time span
+
+    If a pull request appear to be both created and merged in the given time span, it will only appear in the merged pull requests.
+    If nothing can be gathered for that specific list, an empty list will be returned
+    """
+
+    try:
+        prs_merged = get_merged_pull_requests(github_username, after, before)
+        prs_merged_url_set = set([pr["url"] for pr in prs_merged])
+
+        prs_created = [
+            pr
+            for pr in get_pull_requests_created(github_username, after, before)
+            if pr["url"] not in prs_merged_url_set
+        ]
+        issues_created = get_issues_created(github_username, after, before)
+    except Exception as e:
+        return f"{str(e)}"
+
+    res = {
+        "Pull requests merged": prs_merged,
+        "Pull requests created": prs_created,
+        "Issues created": issues_created,
+    }
+
+    return res
+
+
 @mcp.tool()
 async def gather_work_log_with_author_email(
-    author_email: Annotated[str, Field(description="The email of the author of the commits")],
+    author_email: Annotated[
+        str, Field(description="The email of the author of the commits")
+    ],
     dirs: Annotated[
         List[str],
         Field(
@@ -39,22 +100,29 @@ async def gather_work_log_with_author_email(
     before: Annotated[
         str, Field(description="The ending point of the time span for the work log")
     ] = "now",
-) -> str:
+) -> (
+    Dict[
+        Annotated[str, Field(description="Path of the directory")],
+        Annotated[List[str], Field(description="List of all the commit messages")],
+    ]
+    | str
+):
     """Gather all the commit messages with the given author's email within the given time span for the given direscories. This can be used as a fallback tool call when user.email is not set in the global scope or it can be used to gather the work log for a specific author."""
 
-    log = ""
+    log = dict()
 
     try:
         for dir in dirs:
-            dir_log = gather_git_commits(
+            commit_lst = gather_git_commits(
                 convert_relative_to_absolute(dir), after, before, author_email
             )
-            if dir_log:
-                log += f"{dir_log}\n"
+            if commit_lst:
+                log[dir] = commit_lst
 
-        return log if log else "No work log in the given time span"
+        return log if len(log) != 0 else "No work log in the given time span"
     except Exception as e:
         return f"Failed to gather work log: {e}"
+
 
 @mcp.tool()
 async def gather_work_log(
@@ -70,20 +138,26 @@ async def gather_work_log(
     before: Annotated[
         str, Field(description="The ending point of the time span for the work log")
     ] = "now",
-) -> str:
+) -> (
+    Dict[
+        Annotated[str, Field(description="Path of the directory")],
+        Annotated[List[str], Field(description="List of all the commit messages")],
+    ]
+    | str
+):
     """Gather all the commit messages with user.email as the author's email within the given time span for the given direscories"""
 
-    log = ""
+    log = dict()
 
     try:
         for dir in dirs:
-            dir_log = gather_git_commits(
+            commit_lst = gather_git_commits(
                 convert_relative_to_absolute(dir), after, before
             )
-            if dir_log:
-                log += f"{dir_log}\n"
+            if commit_lst:
+                log[dir] = commit_lst
 
-        return log if log else "No work log in the given time span"
+        return log if len(log) != 0 else "No work log in the given time span"
     except Exception as e:
         return f"Failed to gather work log: {e}"
 
@@ -130,21 +204,25 @@ def gather_commit_details(dir: str, commit_hash: str) -> str:
         return ""
 
 
-def gather_git_commits(dir: str, after: str, before: str = "now", author_email: str = "") -> str:
+def gather_git_commits(
+    dir: str, after: str, before: str = "now", author_email: str = ""
+) -> List[str]:
     hashes = gather_git_commit_hash(dir, after, before, author_email)
 
-    full_content = ""
+    commit_lst = []
 
     for hash in hashes:
         details = gather_commit_details(dir, hash)
         # Ignore if no details for this commit (e.g. command failed for some reasons)
         if details:
-            full_content += f"{details}\n"
+            commit_lst.append(details)
 
-    return full_content
+    return commit_lst
 
 
-def gather_git_commit_hash(dir: str, after: str, before: str = "now", author_email: str = "") -> List[str]:
+def gather_git_commit_hash(
+    dir: str, after: str, before: str = "now", author_email: str = ""
+) -> List[str]:
     user_email = get_author_email() if not author_email else author_email
 
     try:

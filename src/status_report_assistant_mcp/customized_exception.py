@@ -1,3 +1,4 @@
+# Git commands related errors
 class UserEmailNotFound(Exception):
     def __init__(self, message: str = ""):
         if message:
@@ -16,6 +17,7 @@ class FailToGetCommitHashes(Exception):
         super().__init__(f"Fail to get commit hashes for the given directoies: {dir}")
 
 
+# Gmail API related errors
 class MissingGoogleOAuth2Credentials(Exception):
     def __init__(self, path: str):
         super().__init__(
@@ -43,3 +45,9 @@ class FailToParseCredentials(Exception):
 class FailToBuildGmailService(Exception):
     def __init__(self, err: str):
         super().__init__(f"Fail to build a service with gmail: {err}")
+
+
+# Github search requests errors
+class GithubHttpRequestsFailed(Exception):
+    def __init__(self, err: str):
+        super().__init__(f"Github HTTP request error: {err}")
